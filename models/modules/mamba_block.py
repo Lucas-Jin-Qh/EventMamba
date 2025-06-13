@@ -10,6 +10,7 @@ from einops import rearrange, repeat
 from typing import Optional, Tuple
 import math
 from functools import partial
+from mamba_ssm import Mamba
 
 
 class MambaBlock(nn.Module):
@@ -23,6 +24,8 @@ class MambaBlock(nn.Module):
         dim: int,
         depth: int = 1,
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         dt_rank: str = "auto",
         ssm_ratio: float = 2.0,
         conv_bias: bool = True,
@@ -42,6 +45,8 @@ class MambaBlock(nn.Module):
             create_block(
                 dim=dim,
                 d_state=d_state,
+                d_conv=d_conv,
+                expand=expand,
                 dt_rank=dt_rank,
                 ssm_ratio=ssm_ratio,
                 conv_bias=conv_bias,
@@ -72,6 +77,8 @@ class MambaBlock(nn.Module):
 def create_block(
     dim: int,
     d_state: int = 16,
+    d_conv: int = 4,
+    expand: int = 2,
     dt_rank: str = "auto",
     ssm_ratio: float = 2.0,
     conv_bias: bool = True,
@@ -89,18 +96,26 @@ def create_block(
     if rms_norm:
         norm_layer = partial(RMSNorm, eps=1e-5)
     
-    # 导入SSM层（假设已经实现）
-    from .ssm_layer import SSMLayer
+    # 使用官方Mamba实现
+    mixer_cls = partial(
+        Mamba,
+        d_state=d_state,
+        d_conv=d_conv,
+        expand=expand,
+        dt_rank=dt_rank,
+        dt_min=0.001,
+        dt_max=0.1,
+        dt_init="random",
+        dt_scale=1.0,
+        dt_init_floor=1e-4,
+        conv_bias=conv_bias,
+        bias=False,
+        use_fast_path=True,
+    )
     
     block = ResidualBlock(
         dim=dim,
-        mixer_cls=partial(
-            SSMLayer,
-            d_state=d_state,
-            dt_rank=dt_rank,
-            ssm_ratio=ssm_ratio,
-            conv_bias=conv_bias
-        ),
+        mixer_cls=mixer_cls,
         norm_cls=norm_layer,
         dropout=dropout,
         drop_path=drop_path,
@@ -131,7 +146,7 @@ class ResidualBlock(nn.Module):
         self.residual_in_fp32 = residual_in_fp32
         
         self.norm = norm_cls(dim, device=device, dtype=dtype)
-        self.mixer = mixer_cls(dim, device=device, dtype=dtype)
+        self.mixer = mixer_cls(d_model=dim, device=device, dtype=dtype)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         
@@ -145,7 +160,7 @@ class ResidualBlock(nn.Module):
         if self.residual_in_fp32:
             x = x.to(dtype=torch.float32)
         
-        x = self.mixer(x, inference_params=inference_params)
+        x = self.mixer(x)
         x = self.dropout(x)
         x = self.drop_path(x)
         
@@ -211,6 +226,8 @@ class BiMambaBlock(nn.Module):
         dim: int,
         depth: int = 1,
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         dt_rank: str = "auto",
         ssm_ratio: float = 2.0,
         conv_bias: bool = True,
@@ -237,6 +254,8 @@ class BiMambaBlock(nn.Module):
             dim=block_dim,
             depth=depth,
             d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
             ssm_ratio=ssm_ratio,
             conv_bias=conv_bias,
@@ -254,6 +273,8 @@ class BiMambaBlock(nn.Module):
             dim=block_dim,
             depth=depth,
             d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
             ssm_ratio=ssm_ratio,
             conv_bias=conv_bias,
@@ -309,6 +330,8 @@ class CrossMambaBlock(nn.Module):
         dim: int,
         depth: int = 1,
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         dt_rank: str = "auto",
         ssm_ratio: float = 2.0,
         conv_bias: bool = True,
@@ -327,6 +350,8 @@ class CrossMambaBlock(nn.Module):
             dim=dim,
             depth=depth,
             d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
             ssm_ratio=ssm_ratio,
             conv_bias=conv_bias,
@@ -344,6 +369,8 @@ class CrossMambaBlock(nn.Module):
             dim=dim,
             depth=depth,
             d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
             ssm_ratio=ssm_ratio,
             conv_bias=conv_bias,
