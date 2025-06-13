@@ -10,6 +10,7 @@ from einops import rearrange, repeat
 from typing import Optional, Tuple, List
 import numpy as np
 import math
+from mamba_ssm import Mamba
 
 
 class HSFCMamba(nn.Module):
@@ -25,6 +26,8 @@ class HSFCMamba(nn.Module):
         depth: int = 1,
         dt_rank: str = "auto",
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         ssm_ratio: float = 2.0,
         attn_drop: float = 0.0,
         mlp_drop: float = 0.0,
@@ -55,6 +58,8 @@ class HSFCMamba(nn.Module):
                 dim_inner=dim_inner,
                 dt_rank=dt_rank,
                 d_state=d_state,
+                d_conv=d_conv,
+                expand=expand,
                 ssm_ratio=ssm_ratio,
                 attn_drop=attn_drop,
                 mlp_drop=mlp_drop,
@@ -72,6 +77,8 @@ class HSFCMamba(nn.Module):
                     dim_inner=dim_inner,
                     dt_rank=dt_rank,
                     d_state=d_state,
+                    d_conv=d_conv,
+                    expand=expand,
                     ssm_ratio=ssm_ratio,
                     attn_drop=attn_drop,
                     mlp_drop=mlp_drop,
@@ -310,6 +317,8 @@ class VisionMambaBlock3D(nn.Module):
         dim_inner: Optional[int] = None,
         dt_rank: str = "auto",
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         ssm_ratio: float = 2.0,
         attn_drop: float = 0.0,
         mlp_drop: float = 0.0,
@@ -325,12 +334,21 @@ class VisionMambaBlock3D(nn.Module):
         self.norm1 = norm_layer(dim)
         self.norm2 = norm_layer(dim)
         
-        # Mamba层
-        self.mamba = MambaLayer3D(
+        # 使用官方Mamba实现
+        self.mamba = Mamba(
             d_model=dim,
-            d_inner=dim_inner,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
-            d_state=d_state
+            dt_min=0.001,
+            dt_max=0.1,
+            dt_init="random",
+            dt_scale=1.0,
+            dt_init_floor=1e-4,
+            conv_bias=True,
+            bias=False,
+            use_fast_path=True,  # 使用优化的CUDA实现
         )
         
         # 1D卷积用于序列
@@ -373,78 +391,6 @@ class VisionMambaBlock3D(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
         return x
-
-
-class MambaLayer3D(nn.Module):
-    """
-    用于3D特征的Mamba层
-    简化实现，实际使用时应替换为官方Mamba实现
-    """
-    
-    def __init__(
-        self,
-        d_model: int,
-        d_inner: int,
-        dt_rank: str = "auto",
-        d_state: int = 16
-    ):
-        super().__init__()
-        
-        self.d_model = d_model
-        self.d_inner = d_inner
-        self.d_state = d_state
-        
-        # 计算dt_rank
-        if dt_rank == "auto":
-            self.dt_rank = math.ceil(d_model / 16)
-        else:
-            self.dt_rank = dt_rank
-        
-        # 输入投影
-        self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
-        
-        # SSM参数
-        self.A_log = nn.Parameter(torch.randn(d_inner, d_state))
-        self.D = nn.Parameter(torch.randn(d_inner))
-        
-        # dt, B, C的投影
-        self.dt_proj = nn.Linear(self.dt_rank, d_inner, bias=False)
-        self.x_proj = nn.Linear(d_inner, self.dt_rank + d_state * 2, bias=False)
-        
-        # 输出投影
-        self.out_proj = nn.Linear(d_inner, d_model, bias=False)
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        简化的前向传播
-        """
-        B, L, _ = x.shape
-        
-        # 输入投影
-        xz = self.in_proj(x)
-        x, z = xz.chunk(2, dim=-1)
-        
-        # 应用激活函数
-        x = F.silu(x)
-        
-        # SSM计算（简化版本）
-        A = -torch.exp(self.A_log)
-        
-        # 投影得到dt, B, C
-        x_proj = self.x_proj(x)
-        dt, BC = torch.split(x_proj, [self.dt_rank, 2*self.d_state], dim=-1)
-        dt = self.dt_proj(dt)
-        dt = F.softplus(dt)
-        
-        B_param, C_param = BC.chunk(2, dim=-1)
-        
-        # 简化的SSM步骤
-        y = x * F.silu(z)
-        
-        # 输出投影
-        output = self.out_proj(y)
-        
-        return output
 
 
 class Mlp(nn.Module):
