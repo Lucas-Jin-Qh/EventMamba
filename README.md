@@ -1,6 +1,6 @@
 # EventMamba Implementation
 
-This is an updated implementation of **EventMamba: Enhancing Spatio-Temporal Locality with State Space Models for Event-Based Video Reconstruction**.
+This is an unofficial implementation code base of the paper "**EventMamba: Enhancing Spatio-Temporal Locality with State Space Models for Event-Based Video Reconstruction**"
 
 ## Key Updates
 
