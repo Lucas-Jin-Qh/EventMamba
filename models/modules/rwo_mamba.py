@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from typing import Optional, Tuple
 import math
+from mamba_ssm import Mamba
 
 
 class RWOMamba(nn.Module):
@@ -25,6 +26,8 @@ class RWOMamba(nn.Module):
         window_size: int = 8,
         dt_rank: str = "auto",
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         ssm_ratio: float = 2.0,
         attn_drop: float = 0.0,
         mlp_drop: float = 0.0,
@@ -50,6 +53,8 @@ class RWOMamba(nn.Module):
                 dim_inner=dim_inner,
                 dt_rank=dt_rank,
                 d_state=d_state,
+                d_conv=d_conv,
+                expand=expand,
                 ssm_ratio=ssm_ratio,
                 attn_drop=attn_drop,
                 mlp_drop=mlp_drop,
@@ -191,6 +196,8 @@ class VisionMambaBlock(nn.Module):
         dim_inner: Optional[int] = None,
         dt_rank: str = "auto",
         d_state: int = 16,
+        d_conv: int = 4,
+        expand: int = 2,
         ssm_ratio: float = 2.0,
         attn_drop: float = 0.0,
         mlp_drop: float = 0.0,
@@ -206,12 +213,21 @@ class VisionMambaBlock(nn.Module):
         self.norm1 = norm_layer(dim)
         self.norm2 = norm_layer(dim)
         
-        # Mamba层
-        self.mamba = MambaLayer(
+        # 使用官方Mamba实现
+        self.mamba = Mamba(
             d_model=dim,
-            d_inner=dim_inner,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
             dt_rank=dt_rank,
-            d_state=d_state
+            dt_min=0.001,
+            dt_max=0.1,
+            dt_init="random",
+            dt_scale=1.0,
+            dt_init_floor=1e-4,
+            conv_bias=True,
+            bias=False,
+            use_fast_path=True,  # 使用优化的CUDA实现
         )
         
         # 深度卷积
@@ -255,81 +271,6 @@ class VisionMambaBlock(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         
         return x
-
-
-class MambaLayer(nn.Module):
-    """
-    简化的Mamba层实现
-    实际实现中应该使用官方的Mamba实现以获得最佳性能
-    """
-    
-    def __init__(
-        self,
-        d_model: int,
-        d_inner: int,
-        dt_rank: str = "auto",
-        d_state: int = 16
-    ):
-        super().__init__()
-        
-        self.d_model = d_model
-        self.d_inner = d_inner
-        self.d_state = d_state
-        
-        # 计算dt_rank
-        if dt_rank == "auto":
-            self.dt_rank = math.ceil(d_model / 16)
-        else:
-            self.dt_rank = dt_rank
-        
-        # 输入投影
-        self.in_proj = nn.Linear(d_model, d_inner * 2, bias=False)
-        
-        # SSM参数
-        self.A_log = nn.Parameter(torch.randn(d_inner, d_state))
-        self.D = nn.Parameter(torch.randn(d_inner))
-        
-        # dt, B, C的投影
-        self.dt_proj = nn.Linear(self.dt_rank, d_inner, bias=False)
-        self.x_proj = nn.Linear(d_inner, self.dt_rank + d_state * 2, bias=False)
-        
-        # 输出投影
-        self.out_proj = nn.Linear(d_inner, d_model, bias=False)
-        
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        简化的前向传播
-        注意：这是一个简化实现，实际使用时应替换为官方Mamba实现
-        """
-        B, L, _ = x.shape
-        
-        # 输入投影
-        xz = self.in_proj(x)  # (B, L, 2*d_inner)
-        x, z = xz.chunk(2, dim=-1)  # 各 (B, L, d_inner)
-        
-        # 应用激活函数
-        x = F.silu(x)
-        
-        # SSM计算（简化版本）
-        # 实际实现需要使用选择性扫描算法
-        A = -torch.exp(self.A_log)  # (d_inner, d_state)
-        
-        # 投影得到dt, B, C
-        x_proj = self.x_proj(x)  # (B, L, dt_rank + 2*d_state)
-        dt, BC = torch.split(x_proj, [self.dt_rank, 2*self.d_state], dim=-1)
-        dt = self.dt_proj(dt)  # (B, L, d_inner)
-        dt = F.softplus(dt)
-        
-        B_param, C_param = BC.chunk(2, dim=-1)  # 各 (B, L, d_state)
-        
-        # 简化的SSM步骤（实际需要扫描算法）
-        # 这里仅作为占位符
-        y = x * F.silu(z)
-        
-        # 输出投影
-        output = self.out_proj(y)
-        
-        return output
 
 
 class Mlp(nn.Module):
