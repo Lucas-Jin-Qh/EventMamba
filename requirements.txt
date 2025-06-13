@@ -1,0 +1,8 @@
+# EventMamba Requirements
+torch>=2.0.0
+torchvision>=0.15.0
+einops>=0.6.0
+numpy>=1.21.0
+mamba-ssm>=1.1.0  # 官方Mamba实现
+causal-conv1d>=1.1.0  # Mamba依赖
+triton>=2.0.0  # CUDA优化

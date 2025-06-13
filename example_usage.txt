@@ -1,0 +1,224 @@
+"""
+EventMamba使用示例
+展示如何使用EventMamba进行事件视频重建
+"""
+
+import torch
+import torch.nn as nn
+from einops import rearrange
+from rwo_mamba import RWOMamba
+from hsfc_mamba import HSFCMamba
+
+
+class EventMamba(nn.Module):
+    """
+    EventMamba完整模型
+    结合RWOMamba和HSFCMamba用于事件视频重建
+    """
+    
+    def __init__(
+        self,
+        in_channels: int = 5,  # 事件体素的通道数（B=5）
+        base_channels: int = 32,  # 基础通道数
+        num_stages: int = 4,  # 编码器/解码器阶段数
+        depths: list = [2, 2, 2, 2],  # 每个阶段的深度
+        window_size: int = 8,  # RWO窗口大小
+        d_state: int = 16,  # SSM状态维度
+        dt_rank: str = "auto",  # dt_rank设置
+        ssm_ratio: float = 2.0,  # SSM扩展比例
+        monte_carlo_samples: int = 8,  # 测试时的MC采样数
+        use_hsfc: bool = True,  # 是否使用HSFC
+        bidirectional: bool = True,  # 是否使用双向扫描
+    ):
+        super().__init__()
+        
+        self.num_stages = num_stages
+        self.use_hsfc = use_hsfc
+        
+        # 输入投影
+        self.input_proj = nn.Conv2d(in_channels, base_channels, kernel_size=3, padding=1)
+        
+        # 编码器
+        self.encoders = nn.ModuleList()
+        self.downsamplers = nn.ModuleList()
+        
+        for i in range(num_stages):
+            channels = base_channels * (2 ** i)
+            
+            # RWOMamba编码器
+            encoder = RWOMamba(
+                dim=channels,
+                depth=depths[i],
+                window_size=window_size,
+                d_state=d_state,
+                dt_rank=dt_rank,
+                ssm_ratio=ssm_ratio,
+                num_monte_carlo_samples=monte_carlo_samples
+            )
+            self.encoders.append(encoder)
+            
+            # 下采样（除了最后一层）
+            if i < num_stages - 1:
+                downsampler = nn.Conv2d(
+                    channels, 
+                    channels * 2, 
+                    kernel_size=2, 
+                    stride=2
+                )
+                self.downsamplers.append(downsampler)
+        
+        # 中间的HSFC处理（如果启用）
+        if use_hsfc:
+            bottleneck_channels = base_channels * (2 ** (num_stages - 1))
+            self.hsfc_mamba = HSFCMamba(
+                dim=bottleneck_channels,
+                depth=2,
+                d_state=d_state,
+                dt_rank=dt_rank,
+                ssm_ratio=ssm_ratio,
+                bidirectional=bidirectional,
+                merge_mode="concat" if bidirectional else "add"
+            )
+        
+        # 解码器
+        self.decoders = nn.ModuleList()
+        self.upsamplers = nn.ModuleList()
+        
+        for i in range(num_stages - 1, -1, -1):
+            channels = base_channels * (2 ** i)
+            
+            # 上采样（除了第一层）
+            if i < num_stages - 1:
+                upsampler = nn.ConvTranspose2d(
+                    channels * 2,
+                    channels,
+                    kernel_size=2,
+                    stride=2
+                )
+                self.upsamplers.append(upsampler)
+            
+            # RWOMamba解码器
+            decoder = RWOMamba(
+                dim=channels,
+                depth=depths[i],
+                window_size=window_size,
+                d_state=d_state,
+                dt_rank=dt_rank,
+                ssm_ratio=ssm_ratio,
+                num_monte_carlo_samples=monte_carlo_samples
+            )
+            self.decoders.append(decoder)
+        
+        # 输出投影
+        self.output_proj = nn.Conv2d(base_channels, 1, kernel_size=3, padding=1)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, event_voxel: torch.Tensor) -> torch.Tensor:
+        """
+        前向传播
+        Args:
+            event_voxel: (B, 5, H, W) 事件体素网格
+        Returns:
+            intensity_image: (B, 1, H, W) 重建的强度图像
+        """
+        # 输入投影
+        x = self.input_proj(event_voxel)
+        
+        # 编码器路径
+        encoder_features = []
+        for i in range(self.num_stages):
+            x = self.encoders[i](x)
+            encoder_features.append(x)
+            
+            if i < self.num_stages - 1:
+                x = self.downsamplers[i](x)
+        
+        # HSFC处理（如果启用）
+        if self.use_hsfc:
+            # 假设有时间维度，需要重新排列
+            B, C, H, W = x.shape
+            # 这里简化处理，实际应该有时间维度
+            x_3d = x.unsqueeze(2)  # (B, C, 1, H, W)
+            x_3d = self.hsfc_mamba(x_3d)
+            x = x_3d.squeeze(2)  # (B, C, H, W)
+        
+        # 解码器路径
+        for i in range(self.num_stages):
+            if i > 0:
+                x = self.upsamplers[i-1](x)
+                # 跳跃连接
+                skip_feature = encoder_features[self.num_stages - 1 - i]
+                x = x + skip_feature
+            
+            x = self.decoders[i](x)
+        
+        # 输出投影
+        output = self.output_proj(x)
+        output = self.sigmoid(output)
+        
+        return output
+
+
+def main():
+    """主函数：演示EventMamba的使用"""
+    
+    # 设置设备
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    
+    # 创建模型
+    model = EventMamba(
+        in_channels=5,
+        base_channels=32,
+        num_stages=4,
+        depths=[2, 2, 2, 2],
+        window_size=8,
+        d_state=16,
+        dt_rank="auto",
+        ssm_ratio=2.0,
+        monte_carlo_samples=8,
+        use_hsfc=True,
+        bidirectional=True
+    ).to(device)
+    
+    print(f"Model created with {sum(p.numel() for p in model.parameters())} parameters")
+    
+    # 创建示例输入
+    batch_size = 4
+    height, width = 256, 256
+    event_voxel = torch.randn(batch_size, 5, height, width).to(device)
+    
+    # 前向传播
+    model.eval()  # 设置为评估模式
+    with torch.no_grad():
+        output = model(event_voxel)
+    
+    print(f"Input shape: {event_voxel.shape}")
+    print(f"Output shape: {output.shape}")
+    print(f"Output range: [{output.min().item():.4f}, {output.max().item():.4f}]")
+    
+    # 训练模式示例
+    model.train()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4)
+    
+    # 模拟训练步骤
+    for i in range(3):
+        # 创建随机目标
+        target = torch.rand(batch_size, 1, height, width).to(device)
+        
+        # 前向传播
+        output = model(event_voxel)
+        
+        # 计算损失（简化版本）
+        loss = nn.functional.mse_loss(output, target)
+        
+        # 反向传播
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        print(f"Step {i+1}, Loss: {loss.item():.4f}")
+
+
+if __name__ == "__main__":
+    main()
