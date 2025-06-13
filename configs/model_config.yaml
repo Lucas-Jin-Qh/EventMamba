@@ -1,0 +1,157 @@
+# EventMamba Model Configuration
+# This file contains all model architecture configurations
+
+# Model architecture
+model:
+  name: EventMamba
+  type: unet_mamba  # Model type
+  
+  # Input/Output configurations
+  input_channels: 5  # Number of voxel grid bins
+  output_channels: 1  # Grayscale output
+  
+  # U-Net backbone settings
+  unet:
+    base_channels: 32  # Initial number of channels
+    num_stages: 4  # Number of encoder/decoder stages
+    channel_multiplier: [1, 2, 4, 8]  # Channel multiplication per stage
+    use_residual: true  # Residual connections in conv blocks
+    norm_type: layernorm  # Options: batchnorm, layernorm, groupnorm
+    activation: gelu  # Options: relu, gelu, silu, swish
+    
+  # Initial feature extraction
+  stem:
+    kernel_size: 7
+    stride: 1
+    padding: 3
+    use_3d_conv: true  # 3D convolution for temporal dimension
+    
+  # Final output layer
+  head:
+    kernel_size: 1
+    activation: sigmoid  # Options: sigmoid, tanh, none
+
+# RWOMamba (Random Window Offset Mamba) settings
+rwo_mamba:
+  # Window configuration
+  window_size: 8  # Size of local windows
+  shift_mode: random  # Options: random, fixed, adaptive
+  shift_range: [0, 8]  # Range for random shifts
+  
+  # Mamba block settings
+  embed_dim_ratio: 1  # Embedding dimension ratio
+  ssm_ratio: 2  # State space model expansion ratio
+  num_heads: 8  # Number of attention heads (for hybrid models)
+  
+  # VMB (Vision Mamba Block) settings
+  vmb:
+    use_dwconv: true  # Use depth-wise convolution
+    dwconv_kernel_size: 3
+    mlp_ratio: 4.0  # MLP expansion ratio
+    drop_rate: 0.0  # Dropout rate
+    drop_path_rate: 0.1  # Stochastic depth rate
+    
+  # Monte Carlo inference
+  monte_carlo:
+    num_samples: 8  # Number of MC samples during inference
+    deterministic_eval: false  # Use deterministic shifts during eval
+
+# HSFCMamba (Hilbert Space-Filling Curve Mamba) settings
+hsfc_mamba:
+  # Hilbert curve settings
+  curve_order: 3  # Order of Hilbert curve (2^order × 2^order)
+  bidirectional: true  # Use bidirectional scanning
+  
+  # Scanning strategies
+  scan_types: [hilbert, trans_hilbert]  # Types of scans to use
+  fusion_method: concat  # Options: concat, add, attention
+  
+  # Feature processing
+  sequence_norm: true  # Normalize along sequence dimension
+  position_encoding: false  # Add positional encoding to sequences
+
+# State Space Model (SSM) core settings
+ssm:
+  # Model dimensions
+  state_dim: 16  # Hidden state dimension
+  dt_rank: auto  # Rank for delta computation (auto = d_model // 16)
+  dt_scale: 1.0  # Delta scaling factor
+  dt_init: random  # Options: random, constant, exponential
+  dt_min: 0.001
+  dt_max: 0.1
+  
+  # SSM initialization
+  A_init: complex_exponential  # Options: complex_exponential, random, identity
+  D_init: ones  # Options: ones, zeros, random
+  
+  # Discretization
+  discretization: zoh  # Zero-order hold
+  use_fast_path: true  # Use optimized CUDA kernels
+  
+  # Numerical stability
+  eps: 1e-6
+  clamp_outputs: false
+
+# Skip connections
+skip_connections:
+  type: concatenate  # Options: concatenate, add
+  use_conv_adjust: true  # Use 1x1 conv to adjust channels
+  norm_before_skip: false
+
+# Attention mechanisms (optional hybrid)
+attention:
+  use_attention: false  # Enable attention in bottleneck
+  attention_type: spatial  # Options: spatial, channel, spatio-temporal
+  num_heads: 8
+  qkv_bias: true
+  attn_drop: 0.0
+  proj_drop: 0.0
+
+# Model optimization settings
+optimization:
+  # Initialization
+  init_type: xavier_uniform  # Options: xavier_uniform, kaiming_normal, normal
+  init_gain: 0.02
+  
+  # Regularization
+  use_spectral_norm: false
+  use_weight_standardization: false
+  
+  # Efficiency settings
+  checkpoint_segments: 2  # Number of segments for gradient checkpointing
+  fuse_operations: true  # Fuse operations where possible
+
+# Architecture variants
+variants:
+  # Lite version (fewer parameters)
+  lite:
+    base_channels: 16
+    num_stages: 3
+    ssm_ratio: 1
+    
+  # Large version (more parameters)
+  large:
+    base_channels: 64
+    num_stages: 5
+    ssm_ratio: 4
+    
+  # Custom variant (user-defined)
+  custom:
+    enabled: false
+    config_path: null
+
+# Inference settings
+inference:
+  # Test-time augmentation
+  tta_enabled: false
+  tta_transforms: [hflip, vflip]
+  
+  # Speed/accuracy trade-offs
+  fast_inference: false  # Skip some computations
+  precision: fp32  # Options: fp32, fp16, int8
+  
+  # Output post-processing
+  post_process:
+    denoise: false
+    sharpen: false
+    gamma_correction: 1.0

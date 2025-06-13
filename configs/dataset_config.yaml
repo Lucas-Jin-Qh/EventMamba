@@ -1,0 +1,130 @@
+# EventMamba Dataset Configuration
+# This file contains all dataset-related configurations
+
+# Dataset paths
+dataset:
+  # Training dataset
+  train:
+    event_path: /path/to/train/events
+    frame_path: /path/to/train/frames
+    flow_path: /path/to/train/flows  # Optional, for temporal consistency
+    split_file: /path/to/train_split.txt
+    
+  # Validation dataset
+  val:
+    event_path: /path/to/val/events
+    frame_path: /path/to/val/frames
+    flow_path: /path/to/val/flows
+    split_file: /path/to/val_split.txt
+    
+  # Test dataset
+  test:
+    event_path: /path/to/test/events
+    frame_path: /path/to/test/frames
+    flow_path: /path/to/test/flows
+    split_file: /path/to/test_split.txt
+
+# Event representation settings
+event_representation:
+  type: voxel_grid  # Options: voxel_grid, event_frame, raw_events
+  num_bins: 5  # Number of temporal bins for voxel grid
+  height: 180  # Event camera resolution
+  width: 240
+  normalize: true  # Normalize timestamps to [0, 1]
+  polarity_mode: two_channel  # Options: two_channel, single_channel, four_channel
+
+# Voxel grid settings
+voxel_grid:
+  temporal_bins: 5
+  spatial_resolution: [180, 240]  # [H, W]
+  accumulation_method: bilinear  # Options: bilinear, nearest
+  normalize_events: true
+  threshold_mode: none  # Options: none, constant, adaptive
+  threshold_value: 0.2
+
+# Event preprocessing
+preprocessing:
+  # Temporal window
+  time_window: 50.0  # milliseconds
+  sliding_window: true
+  window_stride: 25.0  # milliseconds
+  
+  # Spatial preprocessing
+  undistort: false  # Apply camera undistortion
+  rectify: false  # Apply stereo rectification
+  
+  # Event filtering
+  filter_hot_pixels: true
+  hot_pixel_threshold: 100  # events per pixel per second
+  refractory_period: 1.0  # microseconds
+  
+  # Noise filtering
+  filter_noise: true
+  spatial_filter_size: 1  # pixels
+  temporal_filter_size: 10000  # microseconds
+
+# Data loading settings
+data_loading:
+  # Event file formats
+  event_format: h5  # Options: h5, txt, aedat, rosbag
+  frame_format: png  # Options: png, jpg, npy
+  
+  # Memory management
+  load_to_memory: false  # Load entire dataset to RAM
+  cache_size: 1000  # Number of samples to cache
+  prefetch_factor: 2  # Number of batches to prefetch
+  
+  # Sequence settings
+  sequence_length: 1  # Number of frames per sequence
+  skip_frames: 0  # Skip frames between sequences
+  random_start: true  # Random starting point for sequences
+
+# Dataset-specific settings
+dataset_specific:
+  # HQF dataset settings
+  HQF:
+    camera_name: prophesee
+    use_interpolated_frames: true
+    frame_rate: 1000  # Hz
+    
+  # DSEC dataset settings
+  DSEC:
+    use_day_scenes: true
+    use_night_scenes: false
+    include_imu: false
+    
+  # MVSEC dataset settings
+  MVSEC:
+    indoor_sequences: [indoor_flying1, indoor_flying2, indoor_flying3]
+    outdoor_sequences: [outdoor_day1, outdoor_day2]
+    
+  # ECD dataset settings
+  ECD:
+    use_synthetic: true
+    use_real: true
+    difficulty: all  # Options: easy, medium, hard, all
+
+# Data statistics (for normalization)
+statistics:
+  event_rate:
+    mean: 1000000  # events per second
+    std: 500000
+  pixel_values:
+    mean: 0.5
+    std: 0.25
+  compute_on_the_fly: false  # Compute statistics from data
+
+# Validation/Test specific settings
+evaluation:
+  # Evaluation metrics
+  compute_metrics_on: full_resolution  # Options: full_resolution, center_crop, patches
+  center_crop_size: [128, 128]
+  
+  # Temporal evaluation
+  evaluate_sequences: true
+  sequence_overlap: 0.5
+  
+  # Save settings
+  save_event_visualizations: true
+  save_intermediate_outputs: false
+  visualization_fps: 30

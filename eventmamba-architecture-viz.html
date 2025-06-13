@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventMamba架构图</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .architecture-diagram {
+            width: 100%;
+            height: auto;
+            margin: 20px 0;
+        }
+        
+        .module-description {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .module-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        
+        .code-block {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EventMamba: 基于状态空间模型的事件相机视频重建架构</h1>
+        
+        <svg class="architecture-diagram" viewBox="0 0 1200 1600" xmlns="http://www.w3.org/2000/svg">
+            <!-- 定义渐变 -->
+            <defs>
+                <linearGradient id="inputGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#8BC34A;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="encoderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#2196F3;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#03A9F4;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="decoderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#FF9800;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#FFC107;stop-opacity:1" />
+                </linearGradient>
+                <linearGradient id="outputGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#9C27B0;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#E91E63;stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            
+            <!-- 输入层 -->
+            <rect x="400" y="50" width="400" height="80" rx="10" fill="url(#inputGradient)"/>
+            <text x="600" y="95" font-size="18" text-anchor="middle" fill="white" font-weight="bold">事件流输入</text>
+            <text x="600" y="115" font-size="14" text-anchor="middle" fill="white">(x, y, t, p)</text>
+            
+            <!-- 箭头 -->
+            <path d="M 600 130 L 600 170" stroke="#333" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+            
+            <!-- 事件表示模块 -->
+            <rect x="350" y="180" width="500" height="120" rx="10" fill="#f0f0f0" stroke="#333" stroke-width="2"/>
+            <text x="600" y="210" font-size="16" text-anchor="middle" font-weight="bold">事件表示模块</text>
+            <text x="600" y="235" font-size="14" text-anchor="middle">• 事件分组 (时间戳)</text>
+            <text x="600" y="255" font-size="14" text-anchor="middle">• 体素网格生成 (H×W×B)</text>
+            <text x="600" y="275" font-size="14" text-anchor="middle">• 时间归一化</text>
+            
+            <!-- 编码器路径 -->
+            <text x="200" y="350" font-size="20" font-weight="bold" fill="#2196F3">编码器路径</text>
+            
+            <!-- 编码器模块 -->
+            <g id="encoder">
+                <!-- Stage 1 -->
+                <rect x="150" y="380" width="300" height="80" rx="8" fill="url(#encoderGradient)"/>
+                <text x="300" y="410" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RWOMamba Block 1</text>
+                <text x="300" y="430" font-size="12" text-anchor="middle" fill="white">随机窗口偏移</text>
+                <text x="300" y="445" font-size="12" text-anchor="middle" fill="white">↓ 2x</text>
+                
+                <rect x="150" y="480" width="300" height="80" rx="8" fill="#64B5F6"/>
+                <text x="300" y="510" font-size="14" text-anchor="middle" fill="white" font-weight="bold">HSFCMamba Block 1</text>
+                <text x="300" y="530" font-size="12" text-anchor="middle" fill="white">Hilbert曲线扫描</text>
+                <text x="300" y="545" font-size="12" text-anchor="middle" fill="white">时空局部性保持</text>
+                
+                <!-- Stage 2 -->
+                <rect x="150" y="580" width="300" height="80" rx="8" fill="url(#encoderGradient)"/>
+                <text x="300" y="610" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RWOMamba Block 2</text>
+                <text x="300" y="630" font-size="12" text-anchor="middle" fill="white">随机窗口偏移</text>
+                <text x="300" y="645" font-size="12" text-anchor="middle" fill="white">↓ 2x</text>
+                
+                <rect x="150" y="680" width="300" height="80" rx="8" fill="#64B5F6"/>
+                <text x="300" y="710" font-size="14" text-anchor="middle" fill="white" font-weight="bold">HSFCMamba Block 2</text>
+                <text x="300" y="730" font-size="12" text-anchor="middle" fill="white">Hilbert曲线扫描</text>
+                <text x="300" y="745" font-size="12" text-anchor="middle" fill="white">时空局部性保持</text>
+            </g>
+            
+            <!-- 瓶颈层 -->
+            <rect x="350" y="800" width="500" height="100" rx="10" fill="#673AB7"/>
+            <text x="600" y="840" font-size="16" text-anchor="middle" fill="white" font-weight="bold">瓶颈层</text>
+            <text x="600" y="865" font-size="14" text-anchor="middle" fill="white">RWOMamba + HSFCMamba</text>
+            
+            <!-- 解码器路径 -->
+            <text x="900" y="350" font-size="20" font-weight="bold" fill="#FF9800">解码器路径</text>
+            
+            <!-- 解码器模块 -->
+            <g id="decoder">
+                <!-- Stage 2 -->
+                <rect x="750" y="680" width="300" height="80" rx="8" fill="url(#decoderGradient)"/>
+                <text x="900" y="710" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RWOMamba Block 3</text>
+                <text x="900" y="730" font-size="12" text-anchor="middle" fill="white">随机窗口偏移</text>
+                <text x="900" y="745" font-size="12" text-anchor="middle" fill="white">↑ 2x</text>
+                
+                <rect x="750" y="580" width="300" height="80" rx="8" fill="#FFB74D"/>
+                <text x="900" y="610" font-size="14" text-anchor="middle" fill="white" font-weight="bold">HSFCMamba Block 3</text>
+                <text x="900" y="630" font-size="12" text-anchor="middle" fill="white">Hilbert曲线扫描</text>
+                <text x="900" y="645" font-size="12" text-anchor="middle" fill="white">+ Skip Connection</text>
+                
+                <!-- Stage 1 -->
+                <rect x="750" y="480" width="300" height="80" rx="8" fill="url(#decoderGradient)"/>
+                <text x="900" y="510" font-size="14" text-anchor="middle" fill="white" font-weight="bold">RWOMamba Block 4</text>
+                <text x="900" y="530" font-size="12" text-anchor="middle" fill="white">随机窗口偏移</text>
+                <text x="900" y="545" font-size="12" text-anchor="middle" fill="white">↑ 2x</text>
+                
+                <rect x="750" y="380" width="300" height="80" rx="8" fill="#FFB74D"/>
+                <text x="900" y="410" font-size="14" text-anchor="middle" fill="white" font-weight="bold">HSFCMamba Block 4</text>
+                <text x="900" y="430" font-size="12" text-anchor="middle" fill="white">Hilbert曲线扫描</text>
+                <text x="900" y="445" font-size="12" text-anchor="middle" fill="white">+ Skip Connection</text>
+            </g>
+            
+            <!-- Skip连接 -->
+            <path d="M 450 420 L 750 420" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+            <path d="M 450 520 L 750 520" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+            <path d="M 450 620 L 750 620" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+            <path d="M 450 720 L 750 720" stroke="#999" stroke-width="2" stroke-dasharray="5,5"/>
+            
+            <!-- 输出层 -->
+            <rect x="400" y="1000" width="400" height="80" rx="10" fill="url(#outputGradient)"/>
+            <text x="600" y="1025" font-size="18" text-anchor="middle" fill="white" font-weight="bold">输出层</text>
+            <text x="600" y="1050" font-size="14" text-anchor="middle" fill="white">Conv2D → 重建图像</text>
+            
+            <!-- 箭头标记 -->
+            <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                    <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+                </marker>
+            </defs>
+            
+            <!-- 连接线 -->
+            <path d="M 600 300 L 600 340 L 300 340 L 300 380" stroke="#333" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+            <path d="M 600 300 L 600 340 L 900 340 L 900 380" stroke="#333" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+            <path d="M 300 760 L 300 850 L 350 850" stroke="#333" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+            <path d="M 900 380 L 900 340 L 900 300" stroke="#333" stroke-width="3" fill="none"/>
+            <path d="M 850 850 L 900 850 L 900 760" stroke="#333" stroke-width="3" fill="none"/>
+            <path d="M 600 900 L 600 1000" stroke="#333" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+            
+            <!-- 关键组件说明 -->
+            <g transform="translate(50, 1150)">
+                <rect x="0" y="0" width="250" height="120" rx="8" fill="#E3F2FD" stroke="#1976D2" stroke-width="2"/>
+                <text x="125" y="25" font-size="16" text-anchor="middle" font-weight="bold" fill="#1976D2">RWOMamba</text>
+                <text x="10" y="50" font-size="12" fill="#333">• 随机窗口偏移策略</text>
+                <text x="10" y="70" font-size="12" fill="#333">• 保持平移不变性</text>
+                <text x="10" y="90" font-size="12" fill="#333">• Vision Mamba Block</text>
+                <text x="10" y="110" font-size="12" fill="#333">• 线性复杂度 O(n)</text>
+            </g>
+            
+            <g transform="translate(350, 1150)">
+                <rect x="0" y="0" width="250" height="120" rx="8" fill="#FFF3E0" stroke="#F57C00" stroke-width="2"/>
+                <text x="125" y="25" font-size="16" text-anchor="middle" font-weight="bold" fill="#F57C00">HSFCMamba</text>
+                <text x="10" y="50" font-size="12" fill="#333">• Hilbert空间填充曲线</text>
+                <text x="10" y="70" font-size="12" fill="#333">• 保持时空局部性</text>
+                <text x="10" y="90" font-size="12" fill="#333">• 双向扫描机制</text>
+                <text x="10" y="110" font-size="12" fill="#333">• 3D→1D序列化</text>
+            </g>
+            
+            <g transform="translate(650, 1150)">
+                <rect x="0" y="0" width="250" height="120" rx="8" fill="#F3E5F5" stroke="#7B1FA2" stroke-width="2"/>
+                <text x="125" y="25" font-size="16" text-anchor="middle" font-weight="bold" fill="#7B1FA2">SSM核心</text>
+                <text x="10" y="50" font-size="12" fill="#333">• 选择性状态空间模型</text>
+                <text x="10" y="70" font-size="12" fill="#333">• 输入依赖参数</text>
+                <text x="10" y="90" font-size="12" fill="#333">• 硬件优化并行扫描</text>
+                <text x="10" y="110" font-size="12" fill="#333">• 长程依赖建模</text>
+            </g>
+            
+            <g transform="translate(950, 1150)">
+                <rect x="0" y="0" width="250" height="120" rx="8" fill="#E8F5E9" stroke="#388E3C" stroke-width="2"/>
+                <text x="125" y="25" font-size="16" text-anchor="middle" font-weight="bold" fill="#388E3C">训练策略</text>
+                <text x="10" y="50" font-size="12" fill="#333">• AdamW优化器</text>
+                <text x="10" y="70" font-size="12" fill="#333">• 指数学习率衰减</text>
+                <text x="10" y="90" font-size="12" fill="#333">• L1+LPIPS+TC损失</text>
+                <text x="10" y="110" font-size="12" fill="#333">• 蒙特卡洛推理(K=8)</text>
+            </g>
+        </svg>
+        
+        <div class="module-description">
+            <div class="module-title">核心创新点</div>
+            <ul>
+                <li><strong>Random Window Offset (RWO)</strong>: 解决固定窗口分区导致的平移不变性损失问题</li>
+                <li><strong>Hilbert Space-Filling Curve (HSFC)</strong>: 保持事件数据的时空局部性</li>
+                <li><strong>U-Net架构与Mamba结合</strong>: 利用编码器-解码器结构和跳跃连接</li>
+                <li><strong>线性复杂度</strong>: O(n)计算复杂度，相比Transformer的O(n²)大幅提升效率</li>
+            </ul>
+        </div>
+        
+        <div class="module-description">
+            <div class="module-title">关键代码示例：RWOMamba前向传播</div>
+            <div class="code-block">
+def forward(self, x):
+    B, C, H, W = x.shape
+    
+    # 训练时：随机窗口偏移
+    if self.training:
+        offset_h = torch.randint(0, self.window_size, (1,))
+        offset_w = torch.randint(0, self.window_size, (1,))
+    else:
+        # 测试时：蒙特卡洛采样
+        offset_h, offset_w = self.get_test_offset()
+    
+    # 应用偏移并分区
+    x_shifted = torch.roll(x, shifts=(offset_h, offset_w), dims=(2, 3))
+    x_windows = window_partition(x_shifted, self.window_size)
+    
+    # 通过Vision Mamba Block
+    x_mamba = self.vmb(x_windows)
+    
+    # 还原窗口
+    x_reversed = window_reverse(x_mamba, self.window_size, H, W)
+    x_output = torch.roll(x_reversed, shifts=(-offset_h, -offset_w), dims=(2, 3))
+    
+    return x_output
+            </div>
+        </div>
+        
+        <div class="module-description">
+            <div class="module-title">关键代码示例：Hilbert曲线扫描</div>
+            <div class="code-block">
+def hilbert_scan(self, x):
+    B, C, T, H, W = x.shape
+    
+    # 生成Hilbert曲线索引
+    hilbert_indices = self.generate_hilbert_indices(T, H, W)
+    
+    # 展平并按Hilbert顺序重排
+    x_flat = x.view(B, C, -1)
+    x_hilbert = x_flat[:, :, hilbert_indices]
+    
+    # 通过Mamba处理
+    x_processed = self.mamba_block(x_hilbert)
+    
+    # 反向映射
+    x_output = torch.zeros_like(x_flat)
+    x_output[:, :, hilbert_indices] = x_processed
+    
+    return x_output.view(B, C, T, H, W)
+            </div>
+        </div>
+    </div>
+</body>
+</html>
